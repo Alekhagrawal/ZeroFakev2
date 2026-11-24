@@ -1,0 +1,11 @@
+# Git ignore rules preventing raw/processed datasets, zip archives, heavy model weights, and Python bytecode from being committed.
+# Inputs: Read by Git; Outputs: Clean repository containing only lightweight source code, documentation, and configs.
+datasets/raw/
+datasets/processed/
+*.zip
+*.pt
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+.DS_Store

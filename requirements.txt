@@ -1,0 +1,14 @@
+# Python package dependencies required to preprocess, train, evaluate, visualize, and demo the ZeroFake detector.
+# Inputs: Used by pip install -r requirements.txt on local machine or Google Colab; Outputs: Configured Python environment.
+torch
+torchvision
+timm
+facenet-pytorch
+opencv-python-headless
+scikit-learn
+matplotlib
+seaborn
+grad-cam
+gradio
+pyyaml
+tqdm

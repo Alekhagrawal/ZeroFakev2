@@ -1,0 +1,2 @@
+# Placeholder file keeping the datasets directory tracked in Git while raw/processed datasets remain ignored.
+# Inputs: None; Outputs: Ensures datasets/ exists in version control.
