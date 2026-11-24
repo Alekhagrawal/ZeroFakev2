@@ -10,5 +10,8 @@ matplotlib
 seaborn
 grad-cam
 gradio
+gradio_client
+discord.py>=2.3.0
+python-dotenv
 pyyaml
 tqdm

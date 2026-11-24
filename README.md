@@ -1,7 +1,7 @@
 <!--
 File: README.md
 Description: Official GitHub repository front page for the ZeroFake project, documenting the problem statement, architecture flowchart, Leave-One-Generator-Out zero-leakage split protocol, actual empirical ablation and robustness results from results/*.csv, visual plots, and quickstart demo instructions.
-Inputs: Referenced by researchers, evaluators, and students visiting https://github.com/Alekhagrawal/ZeroFake.
+Inputs: Referenced by researchers, evaluators, and students visiting https://github.com/Alekhagrawal/ZeroFakev2.
 Outputs: Renders a complete, reproducible GitHub portfolio page.
 -->
 
@@ -9,7 +9,7 @@ Outputs: Renders a complete, reproducible GitHub portfolio page.
 
 **Multi-Generator Supervised Contrastive Learning, Multi-Prototype Fake Representation, and Calibrated Open-Set Uncertainty**
 
-[![Repository](https://img.shields.io/badge/GitHub-Alekhagrawal%2FZeroFake-181717?logo=github)](https://github.com/Alekhagrawal/ZeroFake)
+[![Repository](https://img.shields.io/badge/GitHub-Alekhagrawal%2FZeroFakev2-181717?logo=github)](https://github.com/Alekhagrawal/ZeroFakev2)
 [![Backbone](https://img.shields.io/badge/Backbone-ConvNeXt--Tiny%20(768--d)-2980b9)](#2-system-architecture--pipeline)
 [![Decision Rule](https://img.shields.io/badge/3--Way%20Output-REAL%20%7C%20FAKE%20%7C%20UNKNOWN-27ae60)](#2-system-architecture--pipeline)
 [![GPU Training](https://img.shields.io/badge/Colab%20Pro-FP16%20Mixed%20Precision-f39c12)](#6-how-to-run-training-evaluation--live-demo)

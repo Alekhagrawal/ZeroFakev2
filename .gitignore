@@ -1,9 +1,20 @@
-# Git ignore rules preventing raw/processed datasets, zip archives, heavy model weights, and Python bytecode from being committed.
-# Inputs: Read by Git; Outputs: Clean repository containing only lightweight source code, documentation, and configs.
-datasets/raw/
-datasets/processed/
-*.zip
+# File: .gitignore
+# What this file does: Prevents secrets (.env), raw/processed datasets, zip archives, heavy model checkpoints, and Python bytecode from being committed to Git.
+# Inputs: Read by Git before staging or committing files.
+# Outputs: Clean repository containing only lightweight source code, documentation, and configs.
+
+.env
+*.env
+checkpoints/
+!checkpoints/.gitkeep
+data/
+datasets/
+!datasets/.gitkeep
+!datasets/__init__.py
+!datasets/deepfake_dataset.py
 *.pt
+*.pth
+*.zip
 __pycache__/
 *.py[cod]
 *$py.class

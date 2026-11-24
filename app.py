@@ -1155,12 +1155,140 @@ class ZeroFakeDemoEngine:
             "evidence_fake": ev_fake_mean,
             "u_score": u_score,
             "tau_reject": tau_reject,
+            "face_confidence": mean_face_conf,
+            "min_frame_dim": min_dim_val,
             "verdict_html": verdict_html,
             "uncertainty_html": unc_html,
             "proto_fig": proto_fig,
             "proto_chart_rgb": proto_chart_rgb,
             "gradcam_3panel": gradcam_3panel,
             "num_valid_frames": len(aligned_crops),
+        }
+
+    def predict_media_api(
+        self,
+        media_path: Optional[str],
+    ) -> Dict[str, Any]:
+        """
+        Programmatic JSON API endpoint (exposed via `api_name="predict_media"`) for external clients
+        such as `discord_bot.py` (`gradio_client`).
+        Accepts a local or uploaded image/video file path and returns a JSON dict:
+          - `verdict` ("REAL", "FAKE", or "UNKNOWN")
+          - `real_pct` (float, 0–100)
+          - `fake_pct` (float, 0–100)
+          - `summary` (str, plain-English interpretation)
+          - `face_status` (str, face detection & clarity summary)
+          - `heatmap_path` (str, saved Grad-CAM 3-panel PNG path)
+        """
+        if not media_path or not os.path.exists(str(media_path)):
+            return {
+                "verdict": VERDICT_UNKNOWN,
+                "real_pct": 0.0,
+                "fake_pct": 0.0,
+                "summary": "No valid media file was received by the ZeroFake API endpoint.",
+                "face_status": "No media file found",
+                "heatmap_path": "",
+            }
+
+        path_str = str(media_path)
+        ext = os.path.splitext(path_str)[1].lower()
+        video_exts = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+        frames: List[np.ndarray] = []
+        is_video_mode = False
+
+        if ext in video_exts:
+            sampled = extract_evenly_spaced_frames(path_str, num_frames=8)
+            frames = [rgb for _, rgb in sampled]
+            is_video_mode = True
+        else:
+            if HAS_PIL and Image is not None:
+                try:
+                    with Image.open(path_str) as pil_im:
+                        frames = [np.asarray(pil_im.convert("RGB"), dtype=np.uint8)]
+                except Exception:
+                    frames = []
+            if not frames:
+                sampled = extract_evenly_spaced_frames(path_str, num_frames=8)
+                frames = [rgb for _, rgb in sampled]
+                is_video_mode = len(frames) > 1
+
+        res = self.analyze_rgb_frames(frames, is_video=is_video_mode)
+
+        # Save the 3-panel Grad-CAM attribution strip to a temporary PNG file
+        heatmap_path = ""
+        gradcam_arr = res.get("gradcam_3panel")
+        if isinstance(gradcam_arr, np.ndarray) and gradcam_arr.ndim == 3:
+            fd, tmp_png = tempfile.mkstemp(prefix="zerofake_gradcam_", suffix=".png")
+            os.close(fd)
+            if HAS_PIL and Image is not None:
+                Image.fromarray(gradcam_arr.astype(np.uint8)).save(tmp_png, format="PNG")
+                heatmap_path = tmp_png
+            else:
+                import struct
+                import zlib
+                arr = gradcam_arr.astype(np.uint8)
+                h_px, w_px, _ = arr.shape
+                raw_rows = b"".join(b"\x00" + arr[y].tobytes() for y in range(h_px))
+                def _png_chunk(tag: bytes, data: bytes) -> bytes:
+                    return struct.pack("!I", len(data)) + tag + data + struct.pack("!I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+                png_bytes = (
+                    b"\x89PNG\r\n\x1a\n"
+                    + _png_chunk(b"IHDR", struct.pack("!IIBBBBB", w_px, h_px, 8, 2, 0, 0, 0))
+                    + _png_chunk(b"IDAT", zlib.compress(raw_rows, 6))
+                    + _png_chunk(b"IEND", b"")
+                )
+                with open(tmp_png, "wb") as pf:
+                    pf.write(png_bytes)
+                heatmap_path = tmp_png
+
+        if not res.get("face_found", False):
+            return {
+                "verdict": VERDICT_UNKNOWN,
+                "real_pct": 0.0,
+                "fake_pct": 0.0,
+                "summary": (
+                    "MTCNN did not detect a clear human face in the uploaded media. "
+                    "Please upload a clear frontal or semi-profile face image or video clip."
+                ),
+                "face_status": "No clear human face detected",
+                "heatmap_path": heatmap_path,
+            }
+
+        verdict = str(res["verdict"]).strip().upper()
+        ev_fake = float(res.get("evidence_fake", 0.5))
+        fake_pct = round(float(np.clip(ev_fake * 100.0, 0.0, 100.0)), 1)
+        real_pct = round(float(np.clip((1.0 - ev_fake) * 100.0, 0.0, 100.0)), 1)
+        num_frames = int(res.get("num_valid_frames", 1))
+        face_conf = float(res.get("face_confidence", 0.99))
+        min_dim = int(res.get("min_frame_dim", 224))
+
+        if is_video_mode or num_frames > 1:
+            face_status = f"{num_frames} video frames analyzed (MTCNN conf {face_conf * 100:.1f}%)"
+        elif face_conf >= 0.90 and min_dim >= 220:
+            face_status = f"Clear face detected (MTCNN conf {face_conf * 100:.1f}%)"
+        else:
+            face_status = f"Stylized / partial face detected (MTCNN conf {face_conf * 100:.1f}%)"
+
+        if verdict == VERDICT_REAL:
+            summary = "Natural skin texture and lighting consistency match genuine camera photos."
+        elif verdict == VERDICT_FAKE:
+            summary = (
+                "Subtle digital blending or synthesis artifacts were detected on the face. "
+                "See the attached Grad-CAM heatmap for spatial attribution."
+            )
+        else:
+            summary = (
+                "Flagged UNKNOWN because this image style or AI generator is unfamiliar "
+                "(U(x) > τ_reject), so ZeroFake avoids making an overconfident guess."
+            )
+
+        return {
+            "verdict": verdict,
+            "real_pct": real_pct,
+            "fake_pct": fake_pct,
+            "summary": summary,
+            "face_status": face_status,
+            "heatmap_path": heatmap_path,
         }
 
     def predict_from_media(
@@ -1232,6 +1360,16 @@ def build_gradio_blocks_app(
         v_html, cam_3p, unc_html, p_out = engine.predict_from_media(None, None)
         return None, None, v_html, cam_3p, unc_html, p_out
 
+    def on_api_predict_media(media_file: Any) -> Dict[str, Any]:
+        file_path = None
+        if isinstance(media_file, str):
+            file_path = media_file
+        elif isinstance(media_file, dict) and "path" in media_file:
+            file_path = media_file["path"]
+        elif hasattr(media_file, "name"):
+            file_path = str(media_file.name)
+        return engine.predict_media_api(file_path)
+
     if not HAS_GRADIO or gr is None:
         return {
             "framework": "gradio_cohesive_wide_saas_ui",
@@ -1246,6 +1384,7 @@ def build_gradio_blocks_app(
             "on_image_input": on_image_input,
             "on_video_input": on_video_input,
             "on_clear_media": on_clear_media,
+            "on_api_predict_media": on_api_predict_media,
         }
 
     theme = gr.themes.Soft(primary_hue="indigo", neutral_hue="slate")
@@ -1438,6 +1577,26 @@ def build_gradio_blocks_app(
             outputs=[image_input, video_input] + output_targets,
         )
 
+        # Hidden programmatic API endpoint (`api_name="predict_media"`) for discord_bot.py / gradio_client.
+        # Returns both the JSON dict and a gr.File component so remote gradio_client downloads the heatmap PNG.
+        with gr.Row(visible=False):
+            api_media_in = gr.File(type="filepath", label="API Media Filepath Input")
+            api_json_out = gr.JSON(label="API Prediction JSON Output")
+            api_heatmap_out = gr.File(label="API Grad-CAM Heatmap PNG")
+            api_trigger_btn = gr.Button("Run API Predict Media")
+
+        def on_api_predict_media_with_file(media_file: Any) -> Tuple[Dict[str, Any], Optional[str]]:
+            resp = on_api_predict_media(media_file)
+            hm = resp.get("heatmap_path")
+            return resp, (hm if (hm and os.path.exists(hm)) else None)
+
+        api_trigger_btn.click(
+            fn=on_api_predict_media_with_file,
+            inputs=[api_media_in],
+            outputs=[api_json_out, api_heatmap_out],
+            api_name="predict_media",
+        )
+
     return demo
 
 
@@ -1474,12 +1633,18 @@ def run_dry_run(checkpoint_path: Optional[str] = None) -> None:
     assert cam_3p.shape == (224, 680, 3), f"Expected 3-panel Grad-CAM shape (224, 680, 3), got {cam_3p.shape}"
     assert "τ_reject" in unc_html, "Uncertainty dropdown HTML missing threshold tau_reject!"
 
-    # 2. Test short video clip auto-inference (8-frame fast sampling)
+    # 2. Test short video clip auto-inference (8-frame fast sampling) AND predict_media API endpoint
     with tempfile.TemporaryDirectory() as tmp_dir:
         dummy_video = os.path.join(tmp_dir, "clip.mp4")
         create_synthetic_video(dummy_video, total_frames=16, height=160, width=160, include_face=True)
         v_vid_html, _, _, _ = engine.predict_from_media(None, dummy_video)
         assert any(lbl in v_vid_html for lbl in ("REAL", "FAKE", "UNKNOWN"))
+
+        api_resp = engine.predict_media_api(dummy_video)
+        required_keys = {"verdict", "real_pct", "fake_pct", "summary", "face_status", "heatmap_path"}
+        assert required_keys.issubset(set(api_resp.keys())), f"API response missing keys: {api_resp}"
+        if api_resp["heatmap_path"] and os.path.exists(api_resp["heatmap_path"]):
+            os.remove(api_resp["heatmap_path"])
 
     # 3. Test faceless image -> friendly warning banner without crashing
     blank_img = np.zeros((224, 224, 3), dtype=np.uint8)

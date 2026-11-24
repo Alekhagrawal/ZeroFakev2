@@ -147,4 +147,4 @@ Use this slide-by-slide blueprint to build your final 12-slide presentation deck
   * **Future Scope (Phase-2 Extensions):**
     * Incorporate temporal frame-to-frame optical flow consistency across video clips.
     * Expand unseen-generator testing to diffusion-based talking-head generators (e.g., Stable Video Diffusion, Sora-style syntheses) and cross-dataset Celeb-DF v2 zero-shot benchmarks.
-* **Visual to Place on Slide:** Summary key-metrics callout box (`98.64% Selective Acc` | `0.9933 Closed AUC` | `0.8016 OOD AUPR` | `100% Zero Identity Leakage`) + GitHub QR code / link (`https://github.com/Alekhagrawal/ZeroFake`).
+* **Visual to Place on Slide:** Summary key-metrics callout box (`98.64% Selective Acc` | `0.9933 Closed AUC` | `0.8016 OOD AUPR` | `100% Zero Identity Leakage`) + GitHub QR code / link (`https://github.com/Alekhagrawal/ZeroFakev2`).
