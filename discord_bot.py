@@ -185,6 +185,7 @@ class ZeroFakePredictorBridge:
         self.zerofake_url = (zerofake_url or "").strip()
         self.default_local_ckpt = checkpoint_path or str(PROJECT_ROOT / "checkpoints" / "zerofake" / "best_model.pt")
         self._local_engine: Any = None
+        self._gradio_client: Any = None
 
     @property
     def mode_description(self) -> str:
@@ -200,6 +201,13 @@ class ZeroFakePredictorBridge:
             ckpt = self.default_local_ckpt if os.path.exists(self.default_local_ckpt) else None
             self._local_engine = ZeroFakeDemoEngine(checkpoint_path=ckpt)
         return self._local_engine
+
+    def _get_gradio_client(self) -> Any:
+        if not HAS_GRADIO_CLIENT or Client is None:
+            raise RuntimeError("gradio_client is not installed. Run `pip install gradio_client`.")
+        if self._gradio_client is None:
+            self._gradio_client = Client(self.zerofake_url)
+        return self._gradio_client
 
     def predict(self, local_media_path: str) -> Dict[str, Any]:
         """
@@ -220,11 +228,19 @@ class ZeroFakePredictorBridge:
         if not HAS_GRADIO_CLIENT or Client is None or handle_file is None:
             raise RuntimeError("gradio_client is not installed. Run `pip install gradio_client`.")
 
-        client = Client(self.zerofake_url)
-        raw_res = client.predict(
-            handle_file(local_media_path),
-            api_name="/predict_media",
-        )
+        try:
+            client = self._get_gradio_client()
+            raw_res = client.predict(
+                handle_file(local_media_path),
+                api_name="/predict_media",
+            )
+        except Exception:
+            # Re-initialize Client once in case the local/remote Gradio server restarted
+            self._gradio_client = Client(self.zerofake_url)
+            raw_res = self._gradio_client.predict(
+                handle_file(local_media_path),
+                api_name="/predict_media",
+            )
 
         # `api_name="predict_media"` returns either `(json_dict, downloaded_heatmap_filepath)` or `json_dict`
         payload_dict: Dict[str, Any] = {}
